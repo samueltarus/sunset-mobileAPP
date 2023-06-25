@@ -1,0 +1,118 @@
+<?php
+
+namespace App\Http\Controllers\Backend;
+
+use App\Http\Controllers\Controller;
+use Illuminate\Http\Request;
+use App\Models\User;
+use Spatie\Permission\Models\Role;
+use Hash;
+
+class StaffsController extends Controller
+{
+    # construct
+    public function __construct()
+    {
+        $this->middleware(['permission:staffs'])->only('index');
+        $this->middleware(['permission:add_staffs'])->only(['create', 'store']);
+        $this->middleware(['permission:edit_staffs'])->only(['edit', 'update']);
+        $this->middleware(['permission:delete_staffs'])->only(['delete']);
+    }
+
+    # staff list
+    public function index(Request $request)
+    {
+        $searchKey = null;
+        $staffs = User::where('user_type', 'staff')->latest();
+        if ($request->search != null) {
+            $staffs = $staffs->where('name', 'like', '%' . $request->search . '%')
+                ->orWhere('email', 'like', '%' . $request->search . '%')
+                ->orWhere('phone', 'like', '%' . $request->search . '%');
+            $searchKey = $request->search;
+        }
+
+        $staffs = $staffs->paginate(paginationNumber());
+        return response()->json([
+           $staffs,
+            $searchKey
+
+        ],200);
+    }
+
+    # return create form
+    public function create()
+    {
+        $roles = Role::oldest()->get();
+        return response()->json([
+           $roles
+
+
+        ],200);
+    }
+
+    # save new staff
+    public function store(Request $request)
+    {
+        if (User::where('email', $request->email)->first() == null) {
+            $user             = new User;
+            $user->name       = $request->name;
+            $user->email      = $request->email;
+            $user->phone      = $request->phone;
+            $user->user_type  = "staff";
+            $user->password   = Hash::make($request->password);
+            $user->role_id    = $request->role_id;
+            $user->save();
+            $user->assignRole(Role::findOrFail($request->role_id)->name);
+
+            flash(localize('Staff has been inserted successfully'))->success();
+            return redirect()->route('admin.staffs.index');
+        }
+        flash(localize('Email already used'))->error();
+        return response()->json([
+            'message'=>'Email already used'
+                  ],200);
+    }
+
+    # edit staff
+    public function edit($id)
+    {
+        $user  = User::findOrFail($id);
+        $roles = Role::latest()->get();
+        return response()->json([
+            $user,
+            $roles
+        ],200);
+    }
+
+    # update staff 
+    public function update(Request $request)
+    {
+        $user             = User::findOrFail($request->id);
+        $user->name       = $request->name;
+        $user->email      = $request->email;
+        $user->phone      = $request->phone;
+        $user->role_id    = $request->role_id;
+
+        if (strlen($request->password) > 0) {
+            $user->password = Hash::make($request->password);
+        }
+
+        $user->save();
+        $user->assignRole(Role::findOrFail($request->role_id)->name);
+
+        flash(localize('Staff has been updated successfully'))->success();
+        return response()->json([
+           'message'=>'Staff has been updated successfully'
+        ],200);
+    }
+
+    # delete staff  
+    public function delete($id)
+    {
+        User::destroy($id);
+        flash(localize('Staff has been deleted successfully'))->success();
+        return response()->json([
+            'message'=>'Staff has been deleted successfully'
+        ],200);
+    }
+}
